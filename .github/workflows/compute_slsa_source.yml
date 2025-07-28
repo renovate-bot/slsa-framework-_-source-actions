@@ -5,6 +5,12 @@
 name: "Compute SLSA Source Metadata"
 on:
   workflow_call:
+    inputs:
+      allow-merge-commits:
+        type: boolean
+        description: 'Experimental support for merge commits '
+        required: false
+        default: false
 
 jobs:
   compute_slsa_source:
@@ -15,3 +21,5 @@ jobs:
     steps:
     - name: prov
       uses: puerco/source-actions/slsa_with_provenance@main
+      with:
+        allow-merge-commits: ${{inputs.allow-merge-commits}}
