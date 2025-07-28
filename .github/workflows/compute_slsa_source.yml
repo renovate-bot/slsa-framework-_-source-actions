@@ -1,0 +1,25 @@
+# SPDX-FileCopyrightText: Copyright 2025 The SLSA Authors
+# SPDX-License-Identifier: Apache-2.0
+---
+  
+name: "Compute SLSA Source Metadata"
+on:
+  workflow_call:
+    inputs:
+      allow-merge-commits:
+        type: boolean
+        description: 'Experimental support for merge commits '
+        required: false
+        default: false
+
+jobs:
+  compute_slsa_source:
+    permissions:
+      contents: write # needed for storing attestations in the repo
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+    - name: prov
+      uses: puerco/source-actions/slsa_with_provenance@main
+      with:
+        allow-merge-commits: ${{inputs.allow-merge-commits}}

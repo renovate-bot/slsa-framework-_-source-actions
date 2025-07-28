@@ -1,0 +1,95 @@
+# SPDX-FileCopyrightText: Copyright 2025 The SLSA Authors
+# SPDX-License-Identifier: Apache-2.0
+---
+name: SLSA Source Provenance Creator
+
+description: Creates SLSA Source Track Provenance
+
+inputs:
+  allow-merge-commits:
+    description: 'Experimental support for merge commits '
+    required: false
+    default: false
+
+runs:
+  using: "Composite"
+  steps:
+    # This PoC depends on creating and checking information when branches are updated (e.g. via push).
+    # Don't allow runs that do not occur during pushes.
+    - id: check_push
+      if: ${{ github.event_name != 'push' }}
+      run: |
+        echo "This action can only be run during a push."
+        exit 1
+      shell: bash
+
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+    - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      with:
+        go-version: '1.24' # We pin this as it is cloning two repos
+
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      with:
+        repository: slsa-framework/slsa-source-poc
+        path: ${{ github.workspace }}/.bin/build
+
+    # This is building sourcetool from source. This step will be replaced
+    # to run the built binary once things are stable.
+    - run: |
+        cd ${{ github.workspace }}/.bin/build/sourcetool
+        go build . 
+        mv sourcetool ${{ github.workspace }}/.bin/
+        cd ${{ github.workspace }}
+        ${{ github.workspace }}/.bin/sourcetool --help
+      name: Build sourcetool
+      shell: bash
+    
+    - id: setup
+      run: mkdir -p metadata
+      shell: bash
+
+    - id: handle_branch_push
+      name: Generate attestations
+      if: ${{ startsWith(github.ref, 'refs/heads/') }}
+      run: |
+        echo "## SLSA Source Properties Branch Push" >> $GITHUB_STEP_SUMMARY
+        echo "The length of the string is: ${#GITHUB_TOKEN}"
+        ${{ github.workspace }}/.bin/sourcetool checklevelprov \
+          --commit ${{ github.sha }} --owner ${{ github.repository_owner }} \
+          --repo ${{ github.event.repository.name }} --branch ${{ github.ref_name }} \
+          --allow-merge-commits="${{ inputs.allow-merge-commits }}" \
+          --output_signed_bundle ${{ github.workspace }}/metadata/signed_bundle.intoto.jsonl >> $GITHUB_STEP_SUMMARY
+      shell: bash
+      env:
+         GITHUB_TOKEN: ${{ github.token }}
+
+    - id: handle_tag_push
+      if: ${{ startsWith(github.ref, 'refs/tags/') }}
+      run: |
+        echo "## SLSA Source Properties Tag Push" >> $GITHUB_STEP_SUMMARY
+        ${{ github.workspace }}/.bin/sourcetool --github_token ${{ github.token }} checktag --commit ${{ github.sha }} --owner ${{ github.repository_owner }} --repo ${{ github.event.repository.name }} --tag_name ${{ github.ref_name }} --actor ${{github.triggering_actor}} --output_signed_bundle ${{ github.workspace }}/metadata/signed_bundle.intoto.jsonl >> $GITHUB_STEP_SUMMARY
+      shell: bash
+      env:
+          GITHUB_TOKEN: ${{ github.token }}
+  
+    - id: summary
+      run: |
+        echo "## Signed Bundle" >> $GITHUB_STEP_SUMMARY
+        cat ${{ github.workspace }}/metadata/signed_bundle.intoto.jsonl >> $GITHUB_STEP_SUMMARY
+      shell: bash
+
+    - run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git fetch origin "refs/notes/*:refs/notes/*"
+          git notes append -F ./metadata/signed_bundle.intoto.jsonl
+          git push origin "refs/notes/*"
+      shell: bash
+      name: store git note
+
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+      if: always()
+      with:
+        name: prov_metadata
+        path: ./metadata/
