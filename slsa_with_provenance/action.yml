@@ -37,8 +37,8 @@ runs:
     # This is building sourcetool from source. This step will be replaced
     # to run the built binary once things are stable.
     - run: |
-        cd ${{ github.workspace }}/.bin/build/sourcetool
-        go build . 
+        cd ${{ github.workspace }}/.bin/build/
+        go build -o sourcetool .
         mv sourcetool ${{ github.workspace }}/.bin/
         cd ${{ github.workspace }}
         ${{ github.workspace }}/.bin/sourcetool --help
