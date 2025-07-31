@@ -11,6 +11,15 @@ inputs:
     required: false
     default: false
 
+  build-from-source:
+    description: 'Build sourcetool from source'
+    required: false
+    default: false
+
+  version:
+    description: "sourcetool version to use"
+    required: true
+
 runs:
   using: "Composite"
   steps:
@@ -23,38 +32,67 @@ runs:
         exit 1
       shell: bash
 
+    # This needs to persis its credentials to store the attestations
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
     - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      if: inputs.build-from-source == 'true'
       with:
         go-version: '1.24' # We pin this as it is cloning two repos
 
     - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      id: checkout_sourcetool_code
+      if: inputs.build-from-source == 'true'
       with:
         repository: slsa-framework/slsa-source-poc
         path: ${{ github.workspace }}/.bin/build
 
     # This is building sourcetool from source. This step will be replaced
     # to run the built binary once things are stable.
-    - run: |
+    - id: build_binary
+      run: |
         cd ${{ github.workspace }}/.bin/build/
         go build -o sourcetool .
         mv sourcetool ${{ github.workspace }}/.bin/
         cd ${{ github.workspace }}
         ${{ github.workspace }}/.bin/sourcetool --help
       name: Build sourcetool
-      shell: bash
-    
-    - id: setup
-      run: mkdir -p metadata
+      if: inputs.build-from-source == 'true'
       shell: bash
 
+    # Todo: Support other platforms
+    - id: download_binary
+      if: inputs.build-from-source == 'false'
+      shell: bash
+      run: | 
+        if [ -z "${{ inputs.version }}" ]; then
+          echo "sourcetool version not set"
+          exit 1
+        fi
+        mkdir -p ${{ github.workspace }}/.bin/
+        curl -fLo ${{ github.workspace }}/.bin/sourcetool https://github.com/slsa-framework/slsa-source-poc/releases/download/${{ inputs.version }}/sourcetool-${{ inputs.version }}-linux-amd64
+        curl -fLo ${{ github.workspace }}/.bin/sourcetool.intoto.jsonl https://github.com/slsa-framework/slsa-source-poc/releases/download/${{ inputs.version }}/sourcetool.intoto.jsonl
+        
+        # TODO verify binary
+        chmod 0755 ${{ github.workspace }}/.bin/sourcetool
+
+    - id: verify_binary
+      if: inputs.build-from-source == 'false'
+      uses: carabiner-dev/actions/ampel/verify@HEAD
+      env:
+        # This is the SLSA builder ID we will verify before running the sourcetool binary
+        AMPEL_BUILDERID: "https://github.com/slsa-framework/slsa-source-poc/.github/workflows/release.yaml"
+      with:
+        subject: ${{ github.workspace }}/.bin/sourcetool
+        collector: "jsonl:${{ github.workspace }}/.bin/sourcetool.intoto.jsonl"
+        policy: "git+https://github.com/carabiner-dev/policies#slsa/builderid-base.json"
+    
     - id: handle_branch_push
       name: Generate attestations
       if: ${{ startsWith(github.ref, 'refs/heads/') }}
       run: |
         echo "## SLSA Source Properties Branch Push" >> $GITHUB_STEP_SUMMARY
-        echo "The length of the string is: ${#GITHUB_TOKEN}"
+        mkdir metadata
         ${{ github.workspace }}/.bin/sourcetool checklevelprov \
           --commit ${{ github.sha }} --owner ${{ github.repository_owner }} \
           --repo ${{ github.event.repository.name }} --branch ${{ github.ref_name }} \
@@ -68,6 +106,7 @@ runs:
       if: ${{ startsWith(github.ref, 'refs/tags/') }}
       run: |
         echo "## SLSA Source Properties Tag Push" >> $GITHUB_STEP_SUMMARY
+        mkdir metadata
         ${{ github.workspace }}/.bin/sourcetool --github_token ${{ github.token }} checktag --commit ${{ github.sha }} --owner ${{ github.repository_owner }} --repo ${{ github.event.repository.name }} --tag_name ${{ github.ref_name }} --actor ${{github.triggering_actor}} --output_signed_bundle ${{ github.workspace }}/metadata/signed_bundle.intoto.jsonl >> $GITHUB_STEP_SUMMARY
       shell: bash
       env:

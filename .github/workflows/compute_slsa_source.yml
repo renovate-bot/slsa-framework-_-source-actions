@@ -12,6 +12,18 @@ on:
         required: false
         default: false
 
+      build-from-source:
+        type: boolean
+        description: 'Build the sourcetool binary from source (@HEAD)'
+        required: false
+        default: false
+
+      version:
+        description: "sourcetool version to run"
+        type: string
+        default: "v0.6.0"
+        required: false
+
 jobs:
   compute_slsa_source:
     permissions:
@@ -23,3 +35,5 @@ jobs:
       uses: slsa-framework/source-actions/slsa_with_provenance@main
       with:
         allow-merge-commits: ${{inputs.allow-merge-commits}}
+        build-from-source: ${{ inputs.build-from-source }}
+        version: ${{ inputs.version }}
