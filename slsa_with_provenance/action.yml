@@ -44,7 +44,7 @@ runs:
       id: checkout_sourcetool_code
       if: inputs.build-from-source == 'true'
       with:
-        repository: slsa-framework/slsa-source-poc
+        repository: slsa-framework/source-tool
         path: ${{ github.workspace }}/.bin/build
 
     # This is building sourcetool from source. This step will be replaced
@@ -70,8 +70,8 @@ runs:
           exit 1
         fi
         mkdir -p ${{ github.workspace }}/.bin/
-        curl -fLo ${{ github.workspace }}/.bin/sourcetool https://github.com/slsa-framework/slsa-source-poc/releases/download/${{ inputs.version }}/sourcetool-${{ inputs.version }}-linux-amd64
-        curl -fLo ${{ github.workspace }}/.bin/sourcetool.intoto.jsonl https://github.com/slsa-framework/slsa-source-poc/releases/download/${{ inputs.version }}/sourcetool.intoto.jsonl
+        curl -fLo ${{ github.workspace }}/.bin/sourcetool https://github.com/slsa-framework/source-tool/releases/download/${{ inputs.version }}/sourcetool-${{ inputs.version }}-linux-amd64
+        curl -fLo ${{ github.workspace }}/.bin/sourcetool.intoto.jsonl https://github.com/slsa-framework/source-tool/releases/download/${{ inputs.version }}/sourcetool.intoto.jsonl
         
         # TODO verify binary
         chmod 0755 ${{ github.workspace }}/.bin/sourcetool
@@ -81,12 +81,12 @@ runs:
       uses: carabiner-dev/actions/ampel/verify@HEAD
       env:
         # This is the SLSA builder ID we will verify before running the sourcetool binary
-        AMPEL_BUILDERID: "https://github.com/slsa-framework/slsa-source-poc/.github/workflows/release.yaml"
+        AMPEL_BUILDERID: "https://github.com/slsa-framework/source-tool/.github/workflows/release.yaml"
       with:
         subject: ${{ github.workspace }}/.bin/sourcetool
         collector: "jsonl:${{ github.workspace }}/.bin/sourcetool.intoto.jsonl"
         policy: "git+https://github.com/carabiner-dev/policies#slsa/builderid-base.json"
-        signer: "sigstore(regexp)::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/slsa-source-poc/.github/workflows/release.yaml@.*"
+        signer: "sigstore(regexp)::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/source-tool/.github/workflows/release.yaml@.*"
     
     - id: handle_branch_push
       name: Generate attestations
